@@ -1,0 +1,48 @@
+name: Deploy Azure Landing Zone Platform
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/bicep/**'
+      - '.github/workflows/deploy-platform.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/bicep/**'
+      - '.github/workflows/deploy-platform.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AZURE_LOCATION: "eastus"
+  MANAGEMENT_GROUP_PREFIX: "alz"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          
+      - name: Deploy Bicep Files
+        uses: azure/arm-deploy@v1
+        with:
+          deploymentName: ${{ github.run_number }}
+          template: ./src/bicep/main.bicep
+          parameters: >
+            mgPrefix=${{ env.MANAGEMENT_GROUP_PREFIX }}
+            location=${{ env.AZURE_LOCATION }}
+          scope: tenant
+          failOnStdErr: false

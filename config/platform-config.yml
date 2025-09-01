@@ -1,0 +1,47 @@
+# Management Group Configuration
+managementGroups:
+  prefix: "alz"
+  groups:
+    - name: "platform"
+      displayName: "Platform"
+      children:
+        - name: "connectivity"
+          displayName: "Connectivity"
+        - name: "identity"
+          displayName: "Identity"
+        - name: "management"
+          displayName: "Management"
+    - name: "landingzones"
+      displayName: "Landing Zones"
+      children:
+        - name: "corp"
+          displayName: "Corporate"
+        - name: "online"
+          displayName: "Online"
+
+# Policies Configuration
+policies:
+  definitions:
+    - name: "Require Resource Group Tags"
+      category: "Tags"
+      description: "Requires specified tags on resource groups"
+    - name: "Allowed Locations"
+      category: "Location"
+      description: "Restricts deployments to approved regions"
+
+# Logging Configuration
+logging:
+  workspaceName: "alz-log-analytics"
+  retentionInDays: 30
+  solutions:
+    - "SecurityInsights"
+    - "Updates"
+    - "ChangeTracking"
+
+# Network Configuration
+networking:
+  hubVnetName: "hub-vnet"
+  hubVnetAddressPrefix: "10.0.0.0/16"
+  firewallSubnet: "10.0.1.0/24"
+  gatewaySubnet: "10.0.2.0/24"
+  bastionSubnet: "10.0.3.0/24"
