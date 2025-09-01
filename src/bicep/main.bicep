@@ -81,55 +81,22 @@ param targetSubscriptionId string
 // Variables for resource group
 var platformRGName = '${prefix}-${environment}-platform-rg'
 
-// Create platform subscription resources
-module subscriptionDeploy 'modules/subscription-deploy.bicep' = {
+// Deploy subscription level resources
+module subscriptionDeploy 'subscription.bicep' = {
   name: 'subscription-deployment'
   scope: subscription(targetSubscriptionId)
   params: {
     prefix: prefix
     environment: environment
     location: location
-    rgName: platformRGName
-    tags: tags
-  }
-}
-
-// Deploy logging and monitoring resources
-module loggingDeploy 'modules/logging/logging.bicep' = {
-  name: 'logging-deployment'
-  scope: resourceGroup(targetSubscriptionId, platformRGName)
-  params: {
-    prefix: prefix
-    environment: environment
-    location: location
-    retentionDays: logRetentionDays
-    enabledSolutions: enabledSolutions
-    tags: tags
-  }
-  dependsOn: [
-    subscriptionDeploy
-  ]
-}
-
-// Deploy platform components
-module platformDeploy 'modules/platform-deploy.bicep' = {
-  name: 'platform-deployment'
-  scope: resourceGroup(targetSubscriptionId, platformRGName)
-  params: {
-    prefix: prefix
-    environment: environment
-    location: location
-    retentionDays: logRetentionDays
+    platformRGName: platformRGName
+    logRetentionDays: logRetentionDays
     enabledSolutions: enabledSolutions
     vnetAddressPrefix: vnetAddressPrefix
     vnetAddressMask: vnetAddressMask
     dnsServers: dnsServers
     tags: tags
   }
-  dependsOn: [
-    subscriptionDeploy
-    loggingDeploy
-  ]
 }
 
 // Policy Definitions Module
