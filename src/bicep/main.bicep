@@ -1,7 +1,5 @@
 targetScope = 'tenant'
 
-// Tenant ID is used implicitly in management group deployments
-
 // Core parameters
 @description('Environment name. Used in resource naming and tags.')
 @allowed(['prod', 'dev', 'test', 'qa'])
@@ -13,25 +11,14 @@ param prefix string
 @description('Primary location for all resources')
 param location string = deployment().location
 
-@description('Optional DNS Servers for the virtual network')
-param dnsServers array = []
-
-@description('Tags to be applied to all resources')
-param tags object = {}
-
-// Network parameters
-@description('Virtual network address prefix')
-param vnetAddressPrefix string
-
-@description('Virtual network address mask (16-24)')
-@minValue(16)
-@maxValue(24)
-param vnetAddressMask int = 16
+@description('The subscription ID where resources will be deployed')
+param targetSubscriptionId string
 
 // Management Group parameters
 @description('Custom names for management groups')
 param mgCustomNames object = {}
 
+// Monitoring parameters
 @description('Log Analytics retention period in days')
 @allowed([30, 60, 90, 120, 180, 365, 730])
 param logRetentionDays int = 30
@@ -42,6 +29,22 @@ param enabledSolutions object = {
   updateManagement: true
   changeTracking: true
 }
+
+// Network parameters
+@description('Virtual network address prefix')
+param vnetAddressPrefix string
+
+@description('Virtual network address mask (16-24)')
+@minValue(16)
+@maxValue(24)
+param vnetAddressMask int = 16
+
+@description('Optional DNS Servers for the virtual network')
+param dnsServers array = []
+
+// Resource tags
+@description('Tags to be applied to all resources')
+param tags object = {}
 
 // Variables
 var managementGroupNames = union({
@@ -56,85 +59,47 @@ var managementGroupNames = union({
   decommissioned: '${prefix}-decom'
 }, mgCustomNames)
 
-// Management Group Module
-module managementGroups 'modules/management-groups.bicep' = {
-  name: 'mg-${prefix}-deployment'
-  params: {
-    prefix: prefix
-    managementGroupNames: managementGroupNames
-    tags: tags
-  }
-}
-
-// Create Management Group Structure
-module mgStructure 'modules/management-groups.bicep' = {
-  name: 'mg-structure-deployment'
-  scope: tenant()
-  params: {
-    prefix: prefix
-    managementGroupNames: managementGroupNames
-    tags: tags
-  }
-}
-
-// Variables for resource group
+// Variables for resource group and naming
 var platformRGName = '${prefix}-${environment}-platform-rg'
 
-@description('The subscription ID where resources will be deployed')
-param targetSubscriptionId string
+// Create Management Group Structure
+module managementGroups 'modules/management-groups.bicep' = {
+  name: 'mg-structure-deployment'
+  params: {
+    prefix: prefix
+    managementGroupNames: managementGroupNames
+  }
+}
 
-// Create Resource Group
-module platformRG 'modules/resource-group.bicep' = {
-  name: 'platform-rg-deployment'
+// Deploy subscription level resources
+module subscriptionDeploy 'subscription.bicep' = {
+  name: 'subscription-deployment'
   scope: subscription(targetSubscriptionId)
   params: {
-    name: platformRGName
-    location: location
-    tags: tags
-  }
-}
-
-// Logging and Monitoring Module
-module logging 'modules/logging.bicep' = {
-  name: 'logging-${environment}-deployment'
-  scope: resourceGroup(targetSubscriptionId, platformRGName)
-  params: {
     prefix: prefix
+    environment: environment
     location: location
-    retentionDays: logRetentionDays
+    platformRGName: platformRGName
+    logRetentionDays: logRetentionDays
     enabledSolutions: enabledSolutions
-    tags: tags
-  }
-  dependsOn: [
-    platformRG
-  ]
-}
-
-// Networking Module
-module networking 'modules/networking.bicep' = {
-  name: 'network-${environment}-deployment'
-  scope: resourceGroup(targetSubscriptionId, platformRGName)
-  params: {
-    prefix: prefix
-    location: location
     vnetAddressPrefix: vnetAddressPrefix
     vnetAddressMask: vnetAddressMask
     dnsServers: dnsServers
     tags: tags
   }
   dependsOn: [
-    platformRG
+    managementGroups
   ]
 }
 
-// Policy Definitions Module
+// Deploy Policy Definitions
 module policyDefinitions 'modules/policy-definitions.bicep' = {
-  name: 'policy-${environment}-deployment'
+  name: 'policy-definitions-deployment'
   scope: managementGroup(managementGroupNames.platform)
   params: {
     location: location
     prefix: prefix
-    tags: tags
+    managementGroupId: managementGroupNames.platform
   }
   dependsOn: [
     managementGroups

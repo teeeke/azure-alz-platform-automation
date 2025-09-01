@@ -6,9 +6,6 @@ param prefix string
 @description('Management group display names')
 param managementGroupNames object
 
-@description('Tags to be applied to all resources')
-param tags object = {}
-
 // Create Platform Management Groups
 resource platformMG 'Microsoft.Management/managementGroups@2021-04-01' = {
   name: '${prefix}-platform'
@@ -20,14 +17,13 @@ resource platformMG 'Microsoft.Management/managementGroups@2021-04-01' = {
       }
     }
   }
-  tags: tags
 }
 
 // Identity Management Group
 resource identityMG 'Microsoft.Management/managementGroups@2021-04-01' = {
-  name: managementGroupNames.identity
+  name: '${prefix}-identity'
   properties: {
-    displayName: 'Identity'
+    displayName: managementGroupNames.identity
     details: {
       parent: {
         id: platformMG.id
