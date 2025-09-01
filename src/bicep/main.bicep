@@ -72,7 +72,7 @@ module managementGroups 'modules/management-groups.bicep' = {
 }
 
 // Deploy subscription level resources
-module subscriptionDeploy 'subscription.bicep' = {
+module subscriptionDeploy 'modules/subscription.bicep' = {
   name: 'subscription-deployment'
   scope: subscription(targetSubscriptionId)
   params: {
