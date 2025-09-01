@@ -1,0 +1,40 @@
+# Custom deployment parameters
+# Copy this file and rename to parameters.{environment}.yml
+parameters:
+  # Environment specific settings
+  environment: "prod"  # prod, dev, test, etc.
+  location: "eastus"   # Azure region
+  prefix: "alz"       # Resource naming prefix
+
+  # Management Group Settings
+  managementGroups:
+    customNames: false  # Set to true to override default naming
+    # Custom names if needed
+    # platform: "platform-custom"
+    # identity: "identity-custom"
+    # ...
+
+  # Networking
+  networking:
+    hub:
+      addressSpace:
+        base: "10.0.0.0"
+        mask: 16
+      dnsServers: []  # Add custom DNS servers if needed
+      # Example: ["10.0.0.4", "10.0.0.5"]
+
+  # Logging
+  logging:
+    retentionDays: 30
+    solutions:
+      securityInsights: true
+      updateManagement: true
+      changeTracking: true
+
+  # Tags
+  tags:
+    Environment: "${environment}"
+    Project: "Azure Landing Zone"
+    Owner: "Platform Team"
+    Department: "IT"
+    CostCenter: "IT-001"
