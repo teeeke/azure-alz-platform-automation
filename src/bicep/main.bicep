@@ -1,5 +1,8 @@
 targetScope = 'tenant'
 
+// Get the tenant ID
+var tenantId = tenant().tenantId
+
 // Core parameters
 @description('Environment name. Used in resource naming and tags.')
 @allowed(['prod', 'dev', 'test', 'qa'])
@@ -64,9 +67,32 @@ module managementGroups 'modules/management-groups.bicep' = {
   }
 }
 
+// Create Management Group Structure
+module mgStructure 'modules/management-groups.bicep' = {
+  name: 'mg-structure-deployment'
+  scope: tenant()
+  params: {
+    prefix: prefix
+    managementGroupNames: managementGroupNames
+    tags: tags
+  }
+}
+
+// Create Resource Group
+module platformRG 'modules/resource-group.bicep' = {
+  name: 'platform-rg-deployment'
+  scope: subscription()
+  params: {
+    name: '${prefix}-${environment}-platform-rg'
+    location: location
+    tags: tags
+  }
+}
+
 // Logging and Monitoring Module
 module logging 'modules/logging.bicep' = {
   name: 'logging-${environment}-deployment'
+  scope: resourceGroup(subscription().subscriptionId, platformRG.outputs.name)
   params: {
     prefix: prefix
     environment: environment
@@ -76,13 +102,14 @@ module logging 'modules/logging.bicep' = {
     tags: tags
   }
   dependsOn: [
-    managementGroups
+    platformRG
   ]
 }
 
 // Networking Module
 module networking 'modules/networking.bicep' = {
   name: 'network-${environment}-deployment'
+  scope: resourceGroup(subscription().subscriptionId, platformRG.outputs.name)
   params: {
     prefix: prefix
     environment: environment
@@ -93,13 +120,14 @@ module networking 'modules/networking.bicep' = {
     tags: tags
   }
   dependsOn: [
-    managementGroups
+    platformRG
   ]
 }
 
 // Policy Definitions Module
 module policyDefinitions 'modules/policy-definitions.bicep' = {
   name: 'policy-${environment}-deployment'
+  scope: managementGroup(managementGroupNames.platform)
   params: {
     location: location
     prefix: prefix
