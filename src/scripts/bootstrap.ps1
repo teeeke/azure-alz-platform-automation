@@ -20,6 +20,10 @@ param (
     [string]$ManagementGroupPrefix = "alz"
 )
 
+# Initialize script-level variable for config
+$script:ALZConfig = $null
+$script:ConfigPath = $null
+
 #Requires -Version 7.0
 #Requires -Modules Az.Accounts, Az.Resources, Az.ManagementGroups
 
@@ -28,7 +32,7 @@ function Test-Prerequisite {
     param()
     Write-Verbose "Checking prerequisites..."
     try {
-        $config = Get-Content -Path $ConfigPath -Raw | ConvertFrom-Yaml
+        $config = Get-Content -Path $script:ConfigPath -Raw | ConvertFrom-Yaml
         Write-Verbose "Configuration file parsed successfully"
         $script:ALZConfig = $config
         $requiredSections = @('azure', 'managementGroups', 'logging', 'networking')
@@ -64,7 +68,7 @@ function Connect-ToAzure {
 }
 
 function New-ManagementGroupStructure {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory = $true)]
         [string]$Prefix,
@@ -80,8 +84,10 @@ function New-ManagementGroupStructure {
             Location = $Location
             ErrorAction = "Stop"
         }
-        $rootGroup = New-AzManagementGroup @rootParams
-        Write-Verbose "Created root management group: $($rootGroup.Name)"
+        if ($PSCmdlet.ShouldProcess("$Prefix-root", "Create root management group")) {
+            $rootGroup = New-AzManagementGroup @rootParams
+            Write-Verbose "Created root management group: $($rootGroup.Name)"
+        }
 
         # Create platform hierarchy
         $groups = @(
@@ -104,8 +110,10 @@ function New-ManagementGroupStructure {
                 Location = $Location
                 ErrorAction = "Stop"
             }
-            $mg = New-AzManagementGroup @mgParams
-            Write-Verbose "Created management group: $($mg.Name)"
+            if ($PSCmdlet.ShouldProcess("$Prefix-$($group.Name)", "Create management group")) {
+                $mg = New-AzManagementGroup @mgParams
+                Write-Verbose "Created management group: $($mg.Name)"
+            }
         }
         Write-Information "Management group hierarchy created" -InformationAction Continue
     }
@@ -129,6 +137,9 @@ try {
     Start-Transcript -Path $logFile
 
     Write-Information "Starting Azure Landing Zone bootstrap process..." -InformationAction Continue
+
+    # Store ConfigPath in script scope for use in Test-Prerequisite
+    $script:ConfigPath = $ConfigPath
 
     # Run deployment steps
     Test-Prerequisite
