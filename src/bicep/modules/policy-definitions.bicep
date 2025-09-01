@@ -71,7 +71,7 @@ resource policies 'Microsoft.Authorization/policyDefinitions@2021-06-01' = [for 
 }]
 
 // Deploy Policy Assignments
-module assignments 'policy-assignments.bicep' = {
+module assignments './policy-assignments.bicep' = {
   name: '${prefix}-policy-assignments'
   scope: managementGroup(managementGroupId)
   params: {
