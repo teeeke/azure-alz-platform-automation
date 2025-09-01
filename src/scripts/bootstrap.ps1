@@ -17,9 +17,11 @@ param (
     [string]$ManagementGroupPrefix = "alz"
 )
 
-# Function to check prerequisites
-function Test-Prerequisites {
-    Write-Host "Checking prerequisites..." -ForegroundColor Cyan
+function Test-Prerequisite {
+    [CmdletBinding()]
+    param()
+
+    Write-Verbose "Checking prerequisites..."
     
     # Check PowerShell version
     if ($PSVersionTable.PSVersion.Major -lt 7) {
