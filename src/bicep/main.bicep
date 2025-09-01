@@ -99,6 +99,7 @@ module policyDefinitions 'modules/policy-definitions.bicep' = {
   params: {
     location: location
     prefix: prefix
+    managementGroupId: managementGroupNames.platform
   }
   dependsOn: [
     managementGroups
