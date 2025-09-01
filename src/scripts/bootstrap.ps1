@@ -1,5 +1,4 @@
-# PowerShell script to bootstrap Azure Landing Zone automation
-
+# Bootstrap script for Azure Landing Zone
 [CmdletBinding()]
 param (
     [Parameter(Mandatory = $true)]
@@ -12,12 +11,36 @@ param (
     [string]$Location,
     
     [Parameter(Mandatory = $false)]
+    [string]$ConfigPath = ".\config\bootstrap-config.yml",
+    
+    [Parameter(Mandatory = $false)]
     [string]$ManagementGroupPrefix = "alz"
 )
 
-# Import required modules
-Import-Module Az.Accounts
-Import-Module Az.Resources
+# Function to check prerequisites
+function Test-Prerequisites {
+    Write-Host "Checking prerequisites..." -ForegroundColor Cyan
+    
+    # Check PowerShell version
+    if ($PSVersionTable.PSVersion.Major -lt 7) {
+        throw "PowerShell 7 or higher is required"
+    }
+    
+    # Check required modules
+    $requiredModules = @('Az.Accounts', 'Az.Resources', 'Az.ManagementGroups')
+    foreach ($module in $requiredModules) {
+        if (!(Get-Module -ListAvailable -Name $module)) {
+            throw "Required module $module is not installed"
+        }
+    }
+    
+    # Check if config file exists
+    if (!(Test-Path $ConfigPath)) {
+        throw "Configuration file not found at $ConfigPath"
+    }
+    
+    Write-Host "All prerequisites met!" -ForegroundColor Green
+}
 
 # Connect to Azure
 try {
