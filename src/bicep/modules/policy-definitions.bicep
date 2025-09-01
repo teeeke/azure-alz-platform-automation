@@ -70,24 +70,9 @@ resource policies 'Microsoft.Authorization/policyDefinitions@2021-06-01' = [for 
   }
 }]
 
-// Deploy Policy Assignments
-module assignments './policy-assignments.bicep' = {
-  name: '${prefix}-policy-assignments'
-  scope: managementGroup(managementGroupId)
-  params: {
-    prefix: prefix
-    policyDefinitions: [for (policy, i) in policyDefinitions: {
-      name: policy.name
-      id: policies[i].id
-      displayName: policy.displayName
-    }]
-    managementGroupId: managementGroupId
-  }
-}
 
 // Outputs
 output policyIds array = [for (policy, i) in policyDefinitions: {
   name: policy.name
   id: policies[i].id
 }]
-output assignmentIds array = assignments.outputs.assignmentIds
