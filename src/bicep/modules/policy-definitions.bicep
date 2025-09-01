@@ -3,9 +3,6 @@ targetScope = 'managementGroup'
 @description('The prefix for resource names')
 param prefix string
 
-@description('The environment (prod, dev, test)')
-param environment string
-
 @description('The Azure region for deployment')
 param location string
 
