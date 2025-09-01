@@ -6,7 +6,7 @@ param prefix string
 @description('The Azure region for deployment')
 param location string
 
-@description('Tags to be applied to all resources')
+@description('Tags to be applied to resources')
 param tags object
 
 // Variables
@@ -63,24 +63,31 @@ resource policies 'Microsoft.Authorization/policyDefinitions@2021-06-01' = [for 
     mode: 'All'
     metadata: {
       category: 'Custom'
-      tags: tags
+      source: 'Azure Landing Zone'
+      version: '1.0.0'
     }
     policyRule: policy.policy
   }
 }]
 
-// Policy Assignments
-resource policyAssignments 'Microsoft.Authorization/policyAssignments@2021-06-01' = [for (policy, i) in policyDefinitions: {
-  name: '${prefix}-${policy.name}-assignment'
-  properties: {
-    displayName: '${policy.displayName} Assignment'
-    policyDefinitionId: policies[i].id
-    parameters: {}
+// Deploy Policy Assignments
+module assignments 'policy-assignments.bicep' = {
+  name: '${prefix}-policy-assignments'
+  scope: managementGroup(managementGroupId)
+  params: {
+    prefix: prefix
+    policyDefinitions: [for (policy, i) in policyDefinitions: {
+      name: policy.name
+      id: policies[i].id
+      displayName: policy.displayName
+    }]
+    managementGroupId: managementGroupId
   }
-}]
+}
 
 // Outputs
 output policyIds array = [for (policy, i) in policyDefinitions: {
   name: policy.name
   id: policies[i].id
 }]
+output assignmentIds array = assignments.outputs.assignmentIds

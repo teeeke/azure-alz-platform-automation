@@ -40,7 +40,7 @@ resource platformRG 'Microsoft.Resources/resourceGroups@2022-09-01' = {
 }
 
 // Deploy logging and monitoring resources
-module loggingDeploy 'modules/logging/logging.bicep' = {
+module logging 'logging.bicep' = {
   name: 'logging-deployment'
   scope: resourceGroup(platformRG.name)
   params: {
@@ -67,6 +67,6 @@ module platformDeploy 'modules/platform-deploy.bicep' = {
     tags: tags
   }
   dependsOn: [
-    loggingDeploy
+    logging
   ]
 }
