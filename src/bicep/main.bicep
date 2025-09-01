@@ -62,7 +62,6 @@ module managementGroups 'modules/management-groups.bicep' = {
   params: {
     prefix: prefix
     managementGroupNames: managementGroupNames
-    tags: tags
   }
 }
 
@@ -73,57 +72,63 @@ module mgStructure 'modules/management-groups.bicep' = {
   params: {
     prefix: prefix
     managementGroupNames: managementGroupNames
-    tags: tags
   }
 }
-
-// Variables for resource group
-var platformRGName = '${prefix}-${environment}-platform-rg'
 
 @description('The subscription ID where resources will be deployed')
 param targetSubscriptionId string
 
-// Create Resource Group
-module platformRG 'modules/resource-group.bicep' = {
-  name: 'platform-rg-deployment'
+// Variables for resource group
+var platformRGName = '${prefix}-${environment}-platform-rg'
+
+// Create platform subscription resources
+module subscriptionDeploy 'modules/subscription-deploy.bicep' = {
+  name: 'subscription-deployment'
   scope: subscription(targetSubscriptionId)
   params: {
-    name: platformRGName
+    prefix: prefix
+    environment: environment
     location: location
+    rgName: platformRGName
     tags: tags
   }
 }
 
-// Logging and Monitoring Module
-module logging 'modules/logging.bicep' = {
-  name: 'logging-${environment}-deployment'
+// Deploy logging and monitoring resources
+module loggingDeploy 'modules/logging/logging.bicep' = {
+  name: 'logging-deployment'
   scope: resourceGroup(targetSubscriptionId, platformRGName)
   params: {
     prefix: prefix
+    environment: environment
     location: location
     retentionDays: logRetentionDays
     enabledSolutions: enabledSolutions
     tags: tags
   }
   dependsOn: [
-    platformRG
+    subscriptionDeploy
   ]
 }
 
-// Networking Module
-module networking 'modules/networking.bicep' = {
-  name: 'network-${environment}-deployment'
+// Deploy platform components
+module platformDeploy 'modules/platform-deploy.bicep' = {
+  name: 'platform-deployment'
   scope: resourceGroup(targetSubscriptionId, platformRGName)
   params: {
     prefix: prefix
+    environment: environment
     location: location
+    retentionDays: logRetentionDays
+    enabledSolutions: enabledSolutions
     vnetAddressPrefix: vnetAddressPrefix
     vnetAddressMask: vnetAddressMask
     dnsServers: dnsServers
     tags: tags
   }
   dependsOn: [
-    platformRG
+    subscriptionDeploy
+    loggingDeploy
   ]
 }
 
@@ -134,7 +139,6 @@ module policyDefinitions 'modules/policy-definitions.bicep' = {
   params: {
     location: location
     prefix: prefix
-    tags: tags
   }
   dependsOn: [
     managementGroups
