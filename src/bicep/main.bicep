@@ -1,5 +1,7 @@
 targetScope = 'tenant'
 
+// Tenant ID is used implicitly in management group deployments
+
 // Core parameters
 @description('Environment name. Used in resource naming and tags.')
 @allowed(['prod', 'dev', 'test', 'qa'])
@@ -64,28 +66,56 @@ module managementGroups 'modules/management-groups.bicep' = {
   }
 }
 
+// Create Management Group Structure
+module mgStructure 'modules/management-groups.bicep' = {
+  name: 'mg-structure-deployment'
+  scope: tenant()
+  params: {
+    prefix: prefix
+    managementGroupNames: managementGroupNames
+    tags: tags
+  }
+}
+
+// Variables for resource group
+var platformRGName = '${prefix}-${environment}-platform-rg'
+
+@description('The subscription ID where resources will be deployed')
+param targetSubscriptionId string
+
+// Create Resource Group
+module platformRG 'modules/resource-group.bicep' = {
+  name: 'platform-rg-deployment'
+  scope: subscription(targetSubscriptionId)
+  params: {
+    name: platformRGName
+    location: location
+    tags: tags
+  }
+}
+
 // Logging and Monitoring Module
 module logging 'modules/logging.bicep' = {
   name: 'logging-${environment}-deployment'
+  scope: resourceGroup(targetSubscriptionId, platformRGName)
   params: {
     prefix: prefix
-    environment: environment
     location: location
     retentionDays: logRetentionDays
     enabledSolutions: enabledSolutions
     tags: tags
   }
   dependsOn: [
-    managementGroups
+    platformRG
   ]
 }
 
 // Networking Module
 module networking 'modules/networking.bicep' = {
   name: 'network-${environment}-deployment'
+  scope: resourceGroup(targetSubscriptionId, platformRGName)
   params: {
     prefix: prefix
-    environment: environment
     location: location
     vnetAddressPrefix: vnetAddressPrefix
     vnetAddressMask: vnetAddressMask
@@ -93,17 +123,17 @@ module networking 'modules/networking.bicep' = {
     tags: tags
   }
   dependsOn: [
-    managementGroups
+    platformRG
   ]
 }
 
 // Policy Definitions Module
 module policyDefinitions 'modules/policy-definitions.bicep' = {
   name: 'policy-${environment}-deployment'
+  scope: managementGroup(managementGroupNames.platform)
   params: {
     location: location
     prefix: prefix
-    environment: environment
     tags: tags
   }
   dependsOn: [

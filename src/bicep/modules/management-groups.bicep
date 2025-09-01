@@ -11,15 +11,16 @@ param tags object = {}
 
 // Create Platform Management Groups
 resource platformMG 'Microsoft.Management/managementGroups@2021-04-01' = {
-  name: managementGroupNames.platform
+  name: '${prefix}-platform'
   properties: {
-    displayName: 'Platform'
+    displayName: managementGroupNames.platform
     details: {
       parent: {
         id: tenant().tenantId
       }
     }
   }
+  tags: tags
 }
 
 // Identity Management Group
