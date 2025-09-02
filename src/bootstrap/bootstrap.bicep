@@ -46,11 +46,27 @@ module managementGroups '../bicep/modules/bootstrap/management-groups.bicep' = {
 }
 
 // ---------------------------
+// RESOURCE GROUP
+// ---------------------------
+module resourceGroupModule '../bicep/modules/bootstrap/resource-group.bicep' = {
+  name: 'rg-deployment'
+  scope: subscription(subscriptionId)
+  params: {
+    resourceGroupName: '${prefix}-${environment}-logging-rg'
+    location: location
+    tags: tags
+  }
+}
+
+// ---------------------------
 // POLICY DEFINITIONS
 // ---------------------------
 module policyDefinitions '../bicep/modules/bootstrap/policy-definitions.bicep' = {
   name: 'policy-definitions-deployment'
   scope: managementGroup('${prefix}-platform')
+  dependsOn: [
+    managementGroups
+  ]
   params: {
     prefix: prefix
     location: location
@@ -77,6 +93,9 @@ module policyAssignments '../bicep/modules/bootstrap/policy-assignments.bicep' =
 module logAnalytics '../bicep/modules/bootstrap/log-analytics.bicep' = {
   name: 'log-analytics-deployment'
   scope: resourceGroup(subscriptionId, '${prefix}-${environment}-logging-rg')
+  dependsOn: [
+    resourceGroupModule
+  ]
   params: {
     workspaceName: '${prefix}-${environment}-logs'
     location: location
@@ -91,6 +110,9 @@ module logAnalytics '../bicep/modules/bootstrap/log-analytics.bicep' = {
 module rbacAssignments '../bicep/modules/bootstrap/rbac-assignment.bicep' = {
   name: 'rbac-deployment'
   scope: managementGroup('${prefix}-platform')
+  dependsOn: [
+    managementGroups
+  ]
   params: {
     prefix: prefix
     roles: rolesArray
@@ -104,6 +126,9 @@ module rbacAssignments '../bicep/modules/bootstrap/rbac-assignment.bicep' = {
 module securityBaselines '../bicep/modules/bootstrap/security-baseline.bicep' = {
   name: 'security-baselines-deployment'
   scope: managementGroup('${prefix}-platform')
+  dependsOn: [
+    managementGroups
+  ]
   params: {
     prefix: prefix
     tags: tags
@@ -119,3 +144,4 @@ output assignmentIds array = policyAssignments.outputs.assignmentIds
 output logWorkspaceId string = logAnalytics.outputs.workspaceId
 output rbacAssignmentIds array = rbacAssignments.outputs.roleAssignmentIds
 output securityBaselineId string = securityBaselines.outputs.securityBaselineId
+output resourceGroupName string = resourceGroupModule.outputs.resourceGroupName
