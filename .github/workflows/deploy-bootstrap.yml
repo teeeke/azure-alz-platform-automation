@@ -10,127 +10,58 @@ on:
         description: 'Comma-separated list of Azure AD groups for RBAC'
         required: true
         default: 'PlatformAdmins,DevOpsTeam'
-      location:
-        description: 'Azure region for deployment'
-        required: true
-        default: 'eastus'
-
 jobs:
   bootstrap:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Login to Azure
-        uses: azure/login@v2
+        uses: azure/login@v1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-      
-      - name: Get current subscription
-        id: get_subscription
-        run: |
-          echo "Getting current subscription ID..."
-          subscriptionId=$(az account show --query id -o tsv)
-          echo "Current subscription: $subscriptionId"
-          echo "subscriptionId=$subscriptionId" >> $GITHUB_ENV
-      
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+
       - name: Resolve group names to IDs
         id: resolve_groups
         run: |
           echo "Resolving principal group names..."
           groups="${{ github.event.inputs.principalGroups }}"
           IFS=',' read -r -a groupArray <<< "$groups"
-          
-          # Build JSON array directly
-          principalIds=""
-          first=true
+          principalIds="[]"
           for group in "${groupArray[@]}"; do
-            # Trim whitespace
-            group=$(echo "$group" | xargs)
-            echo "Resolving group: $group"
-            id=$(az ad group show --group "$group" --query id -o tsv)
-            echo "Found ID: $id"
-            
-            if [ "$first" = true ]; then
-              principalIds="\"$id\""
-              first=false
+            id=$(az ad group show --group "$group" --query id -o tsv || echo "")
+            if [ -n "$id" ]; then
+              principalIds=$(jq --arg id "$id" '. += [$id]' <<< "$principalIds")
             else
-              principalIds="$principalIds,\"$id\""
+              echo "WARNING: Group '$group' not found."
             fi
           done
-          
-          # Create final JSON array
-          principalIds="[$principalIds]"
-          echo "Final principalIds: $principalIds"
-          
-          # Save to file instead of environment variable
-          echo "$principalIds" > /tmp/principal-ids.json
-      
+          echo "principalIds=$principalIds" >> $GITHUB_ENV
+
       - name: Prepare bootstrap parameters
         run: |
-          echo "Reading principal IDs from file:"
-          cat /tmp/principal-ids.json
-          
-          # Read the original parameter file and create a new one with all required parameters
-          principalIds=$(cat /tmp/principal-ids.json)
-          
-          # Create the complete parameter file from scratch
-          cat > parameters/bootstrap-temp.json << EOF
-          {
-            "\$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
-            "contentVersion": "1.0.0.0",
-            "parameters": {
-              "prefix": {
-                "value": "alz"
-              },
-              "environment": {
-                "value": "${{ github.event.inputs.environment }}"
-              },
-              "location": {
-                "value": "${{ github.event.inputs.location }}"
-              },
-              "subscriptionId": {
-                "value": "${{ env.subscriptionId }}"
-              },
-              "principalIds": {
-                "value": $principalIds
-              },
-              "rolesArray": {
-                "value": [
-                  {
-                    "name": "Owner",
-                    "id": "/subscriptions/${{ env.subscriptionId }}/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635"
-                  },
-                  {
-                    "name": "Contributor",
-                    "id": "/subscriptions/${{ env.subscriptionId }}/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c"
-                  }
-                ]
-              },
-              "tags": {
-                "value": {
-                  "Environment": "${{ github.event.inputs.environment }}",
-                  "Owner": "tehuti.ekema@globaris.gov",
-                  "CostCenter": "12345"
-                }
-              },
-              "logRetentionDays": {
-                "value": 30
-              },
-              "mgCustomNames": {
-                "value": {}
-              }
-            }
-          }
-          EOF
-          
-          echo "Generated bootstrap-temp.json:"
+          jq --argjson ids "${{ env.principalIds }}" \
+             '.parameters.principalIds.value = $ids' \
+             parameters/bootstrap-${{ github.event.inputs.environment }}.json > parameters/bootstrap-temp.json
+          echo "Prepared parameter file:"
           cat parameters/bootstrap-temp.json
-      
+
+      # 🔍 New validation step
+      - name: Validate Bootstrap Bicep
+        run: |
+          az deployment tenant validate \
+            --name "bootstrap-validate-${{ github.run_id }}" \
+            --location eastus \
+            --template-file src/bootstrap/bootstrap.bicep \
+            --parameters @parameters/bootstrap-temp.json
+
       - name: Deploy Bootstrap
         run: |
           az deployment tenant create \
             --name "bootstrap-${{ github.event.inputs.environment }}" \
-            --location ${{ github.event.inputs.location }} \
+            --location eastus \
             --template-file src/bootstrap/bootstrap.bicep \
             --parameters @parameters/bootstrap-temp.json
