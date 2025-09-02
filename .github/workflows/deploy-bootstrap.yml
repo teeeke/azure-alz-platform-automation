@@ -1,30 +1,54 @@
-name: Deploy Bootstrap
+name: Bootstrap Deployment
 
 on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Select environment to deploy (dev/test/prod)'
+        description: "Target environment (dev/test/prod)"
         required: true
-        default: 'dev'
-        type: choice
-        options:
-          - dev
-          - test
-          - prod
+        default: "dev"
+      prefix:
+        description: "Resource prefix"
+        required: true
+        default: "demo"
+      location:
+        description: "Azure region"
+        required: true
+        default: "eastus"
+      logRetentionDays:
+        description: "Log Analytics retention days"
+        required: false
+        default: "30"
+      subscriptionId:
+        description: "Subscription ID for logging RG"
+        required: false
+        default: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      tags:
+        description: "Resource tags (JSON string)"
+        required: false
+        default: '{"Owner":"PlatformTeam"}'
+      principalIds:
+        description: "Principal IDs (JSON array)"
+        required: false
+        default: '[]'
+      rolesArray:
+        description: "Role Definition IDs (JSON array)"
+        required: false
+        default: '[]'
+      enabledSolutions:
+        description: "Monitoring solutions (JSON object)"
+        required: false
+        default: '{"securityInsights": true, "updateManagement": true, "changeTracking": true}'
 
 jobs:
-  deploy-bootstrap:
+  deploy:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Azure Login
+      - name: Log in to Azure
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -32,15 +56,19 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
 
-      - name: Install Bicep CLI
-        run: |
-          az bicep install
-          az bicep upgrade
-
-      - name: Deploy Bootstrap
+      - name: Deploy Bootstrap Bicep
         run: |
           az deployment tenant create \
-            --name bootstrap-${{ github.run_id }} \
-            --location eastus \
+            --name "bootstrap-${{ github.run_id }}" \
+            --location ${{ github.event.inputs.location }} \
             --template-file src/bootstrap/bootstrap.bicep \
-            --parameters @parameters/bootstrap-${{ github.event.inputs.environment }}.json
+            --parameters \
+              environment=${{ github.event.inputs.environment }} \
+              prefix=${{ github.event.inputs.prefix }} \
+              location=${{ github.event.inputs.location }} \
+              logRetentionDays=${{ github.event.inputs.logRetentionDays }} \
+              subscriptionId=${{ github.event.inputs.subscriptionId }} \
+              tags="${{ github.event.inputs.tags }}" \
+              principalIds="${{ github.event.inputs.principalIds }}" \
+              rolesArray="${{ github.event.inputs.rolesArray }}" \
+              enabledSolutions="${{ github.event.inputs.enabledSolutions }}"
