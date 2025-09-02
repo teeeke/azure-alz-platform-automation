@@ -112,7 +112,7 @@ jobs:
               "tags": {
                 "value": {
                   "Environment": "${{ github.event.inputs.environment }}",
-                  "Owner": "tehuti.ekema@globaris.gov",
+                  "Owner": "tehuti.ekema@globaris.org",
                   "CostCenter": "12345"
                 }
               },
