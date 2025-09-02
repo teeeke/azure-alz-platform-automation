@@ -25,13 +25,20 @@ jobs:
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+          enable-AzPSSession: true
+      
+      - name: Set Azure CLI defaults
+        run: |
+          az configure --defaults location=${{ github.event.inputs.location }}
+          az account show --output table
       
       - name: Get current subscription
         id: get_subscription
         run: |
           echo "Getting current subscription ID..."
-          subscriptionId=$(az account show --query id -o tsv)
+          subscriptionId=$(az account show --query id --output tsv)
           echo "Current subscription: $subscriptionId"
+          echo "subscriptionId=$subscriptionId" >> $GITHUB_OUTPUT
           echo "subscriptionId=$subscriptionId" >> $GITHUB_ENV
       
       - name: Resolve group names to IDs
@@ -48,8 +55,8 @@ jobs:
             # Trim whitespace
             group=$(echo "$group" | xargs)
             echo "Resolving group: $group"
-            id=$(az ad group show --group "$group" --query id -o tsv)
-            echo "Found ID: $id"
+            id=$(az ad group show --group "$group" --query id --output tsv)
+            echo "Found ID: $id for group: $group"
             
             if [ "$first" = true ]; then
               principalIds="\"$id\""
@@ -63,21 +70,16 @@ jobs:
           principalIds="[$principalIds]"
           echo "Final principalIds: $principalIds"
           
-          # Save to file instead of environment variable
-          echo "$principalIds" > /tmp/principal-ids.json
+          # Save to environment and output
+          echo "principalIds=$principalIds" >> $GITHUB_OUTPUT
+          echo "principalIds=$principalIds" >> $GITHUB_ENV
       
       - name: Prepare bootstrap parameters
         run: |
-          echo "Reading principal IDs from file:"
-          cat /tmp/principal-ids.json
-          
-          # Read the original parameter file and create a new one with all required parameters
-          principalIds=$(cat /tmp/principal-ids.json)
-          
           # Create the complete parameter file from scratch
-          cat > parameters/bootstrap-temp.json << EOF
+          cat > parameters/bootstrap-temp.json << 'EOF'
           {
-            "\$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+            "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
             "contentVersion": "1.0.0.0",
             "parameters": {
               "prefix": {
@@ -93,7 +95,7 @@ jobs:
                 "value": "${{ env.subscriptionId }}"
               },
               "principalIds": {
-                "value": $principalIds
+                "value": ${{ env.principalIds }}
               },
               "rolesArray": {
                 "value": [
@@ -102,7 +104,7 @@ jobs:
                     "id": "/subscriptions/${{ env.subscriptionId }}/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635"
                   },
                   {
-                    "name": "Contributor",
+                    "name": "Contributor", 
                     "id": "/subscriptions/${{ env.subscriptionId }}/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c"
                   }
                 ]
@@ -127,37 +129,29 @@ jobs:
           echo "Generated bootstrap-temp.json:"
           cat parameters/bootstrap-temp.json
       
-      - name: Validate parameters and deploy
+      - name: Validate Bicep template
         run: |
-          echo "=== Validating parameter file ==="
-          if [ ! -f parameters/bootstrap-temp.json ]; then
-            echo "ERROR: Parameter file not found"
-            exit 1
-          fi
-          
-          echo "Parameter file contents:"
-          cat parameters/bootstrap-temp.json
-          
           echo "=== Validating JSON syntax ==="
-          jq . parameters/bootstrap-temp.json > /dev/null
-          if [ $? -ne 0 ]; then
-            echo "ERROR: Invalid JSON in parameter file"
-            exit 1
-          fi
-          
-          echo "=== Checking Azure context ==="
-          az account show
+          jq empty parameters/bootstrap-temp.json
           
           echo "=== Validating Bicep template ==="
           az deployment tenant validate \
             --location ${{ github.event.inputs.location }} \
             --template-file src/bootstrap/bootstrap.bicep \
-            --parameters @parameters/bootstrap-temp.json
+            --parameters @parameters/bootstrap-temp.json \
+            --output table
+      
+      - name: Deploy Bootstrap
+        run: |
+          echo "=== Starting bootstrap deployment ==="
+          deploymentName="bootstrap-${{ github.event.inputs.environment }}-$(date +%Y%m%d-%H%M%S)"
           
-          echo "=== Starting deployment ==="
           az deployment tenant create \
-            --name "bootstrap-${{ github.event.inputs.environment }}-$(date +%Y%m%d-%H%M%S)" \
+            --name "$deploymentName" \
             --location ${{ github.event.inputs.location }} \
             --template-file src/bootstrap/bootstrap.bicep \
             --parameters @parameters/bootstrap-temp.json \
+            --output table \
             --verbose
+          
+          echo "=== Deployment completed: $deploymentName ==="
