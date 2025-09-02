@@ -32,14 +32,18 @@ param dnsServers array
 @description('Name of the platform resource group')
 param platformRGName string
 
-// Create platform resource group
+// -------------------------
+// Resource Group
+// -------------------------
 resource platformRG 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   name: platformRGName
   location: location
   tags: tags
 }
 
-// Deploy logging and monitoring resources
+// -------------------------
+// Logging & Monitoring
+// -------------------------
 module logging './logging/logging.bicep' = {
   name: 'logging-deployment'
   scope: resourceGroup(platformRG.name)
@@ -53,7 +57,9 @@ module logging './logging/logging.bicep' = {
   }
 }
 
-// Deploy platform components
+// -------------------------
+// Platform Components
+// -------------------------
 module platformDeploy './platform-deploy.bicep' = {
   name: 'platform-deployment'
   scope: resourceGroup(platformRG.name)
