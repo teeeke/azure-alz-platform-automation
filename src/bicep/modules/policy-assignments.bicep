@@ -9,16 +9,19 @@ param policyDefinitions array
 @description('The management group ID where policies will be assigned')
 param managementGroupId string
 
-// Policy Assignments
-resource policyAssignments 'Microsoft.Authorization/policyAssignments@2021-06-01' = [for (policy, i) in policyDefinitions: {
-  name: '${prefix}-${policy.name}-assignment'
-  properties: {
-    displayName: '${policy.displayName} Assignment'
-    policyDefinitionId: policy.id
-    enforcementMode: 'Default'
-    parameters: {}
+// Deploy Policy Assignments
+resource policyAssignments 'Microsoft.Authorization/policyAssignments@2021-06-01' = [
+  for policy in policyDefinitions: {
+    name: '${prefix}-${policy.name}-assignment'
+    scope: managementGroup(managementGroupId) // correct scope
+    properties: {
+      displayName: '${policy.displayName} Assignment'
+      policyDefinitionId: policy.id
+      enforcementMode: 'Default'
+      parameters: {}
+    }
   }
-}]
+]
 
 // Outputs
 output assignmentIds array = [for (policy, i) in policyDefinitions: {
