@@ -1,0 +1,12 @@
+{
+  "prefix": "alz",
+  "environment": "prod",
+  "location": "eastus",
+  "tags": {
+    "Environment": "Prod",
+    "Owner": "tehuti.ekema@globaris.gov",
+    "CostCenter": "12345"
+  },
+  "logRetentionDays": 30,
+  "mgCustomNames": {}
+}

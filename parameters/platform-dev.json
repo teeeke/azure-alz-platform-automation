@@ -1,0 +1,19 @@
+{
+  "prefix": "alz",
+  "environment": "dev",
+  "location": "eastus",
+  "tags": {
+    "Environment": "Dev",
+    "Owner": "tehutiekema@globaris.org",
+    "CostCenter": "12345"
+  },
+  "logRetentionDays": 30,
+  "enabledSolutions": {
+    "securityInsights": true,
+    "updateManagement": true,
+    "changeTracking": true
+  },
+  "vnetAddressPrefix": "10.1.0.0/16",
+  "vnetAddressMask": 16,
+  "dnsServers": []
+}

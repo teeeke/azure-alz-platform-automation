@@ -1,0 +1,32 @@
+name: Deploy Bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy (dev/test/prod)'
+        required: true
+        default: 'dev'
+
+jobs:
+  deploy-bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set Parameter File
+        id: set-params
+        run: |
+          echo "PARAM_FILE=parameters/bootstrap-${{ github.event.inputs.environment }}.json" >> $GITHUB_ENV
+
+      - name: Deploy Bootstrap Bicep
+        uses: azure/arm-deploy@v1
+        with:
+          scope: tenant
+          template: src/bootstrap/bootstrap.bicep
+          parameters: ${{ env.PARAM_FILE }}
