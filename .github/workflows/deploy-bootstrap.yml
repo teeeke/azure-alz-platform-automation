@@ -29,23 +29,40 @@ jobs:
           echo "Resolving principal group names..."
           groups="${{ github.event.inputs.principalGroups }}"
           IFS=',' read -r -a groupArray <<< "$groups"
-          principalIds="[]"
+          
+          # Build JSON array directly
+          principalIds=""
+          first=true
           for group in "${groupArray[@]}"; do
             # Trim whitespace
             group=$(echo "$group" | xargs)
             echo "Resolving group: $group"
             id=$(az ad group show --group "$group" --query id -o tsv)
             echo "Found ID: $id"
-            principalIds=$(jq --arg id "$id" '. += [$id]' <<< "$principalIds")
+            
+            if [ "$first" = true ]; then
+              principalIds="\"$id\""
+              first=false
+            else
+              principalIds="$principalIds,\"$id\""
+            fi
           done
+          
+          # Create final JSON array
+          principalIds="[$principalIds]"
           echo "Final principalIds: $principalIds"
-          echo "principalIds<<EOF" >> $GITHUB_ENV
-          echo "$principalIds" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          
+          # Save to file instead of environment variable
+          echo "$principalIds" > /tmp/principal-ids.json
       - name: Prepare bootstrap parameters
         run: |
-          echo "Using principalIds: ${{ env.principalIds }}"
-          jq --argjson ids "${{ env.principalIds }}" '.principalIds = $ids' parameters/bootstrap-${{ github.event.inputs.environment }}.json > parameters/bootstrap-temp.json
+          echo "Reading principal IDs from file:"
+          cat /tmp/principal-ids.json
+          
+          # Use the JSON file directly with jq
+          principalIds=$(cat /tmp/principal-ids.json)
+          jq --argjson ids "$principalIds" '.principalIds = $ids' parameters/bootstrap-${{ github.event.inputs.environment }}.json > parameters/bootstrap-temp.json
+          
           echo "Generated bootstrap-temp.json:"
           cat parameters/bootstrap-temp.json
       - name: Deploy Bootstrap
