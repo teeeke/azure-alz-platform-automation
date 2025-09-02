@@ -18,10 +18,23 @@ param tags object
 @description('Optional custom management group names')
 param mgCustomNames object = {}
 
+@description('Array of principal IDs for RBAC assignments')
+param principalIds array
+
+@description('Array of role definition IDs for RBAC assignments')
+param rolesArray array
+
+@description('Optional enabled monitoring solutions')
+param enabledSolutions object = {
+  securityInsights: true
+  updateManagement: true
+  changeTracking: true
+}
+
 // ---------------------------
-// MODULE: Management Groups
+// MANAGEMENT GROUPS
 // ---------------------------
-module managementGroups 'modules/management-groups.bicep' = {
+module managementGroups '../../bicep/modules/bootstrap/management-groups.bicep' = {
   name: 'mg-deployment'
   params: {
     prefix: prefix
@@ -30,9 +43,9 @@ module managementGroups 'modules/management-groups.bicep' = {
 }
 
 // ---------------------------
-// MODULE: Policy Definitions
+// POLICY DEFINITIONS
 // ---------------------------
-module policyDefinitions 'modules/policy-definitions.bicep' = {
+module policyDefinitions '../../bicep/modules/bootstrap/policy-definitions.bicep' = {
   name: 'policy-definitions-deployment'
   scope: managementGroup(managementGroups.outputs.platformId)
   params: {
@@ -46,9 +59,25 @@ module policyDefinitions 'modules/policy-definitions.bicep' = {
 }
 
 // ---------------------------
-// MODULE: Log Analytics
+// POLICY ASSIGNMENTS
 // ---------------------------
-module logAnalytics 'modules/log-analytics.bicep' = {
+module policyAssignments '../../bicep/modules/bootstrap/policy-assignments.bicep' = {
+  name: 'policy-assignments-deployment'
+  scope: managementGroup(managementGroups.outputs.platformId)
+  params: {
+    prefix: prefix
+    policyDefinitions: policyDefinitions.outputs.policyIds
+    managementGroupId: managementGroups.outputs.platformId
+  }
+  dependsOn: [
+    policyDefinitions
+  ]
+}
+
+// ---------------------------
+// LOG ANALYTICS
+// ---------------------------
+module logAnalytics '../../bicep/modules/bootstrap/log-analytics.bicep' = {
   name: 'log-analytics-deployment'
   scope: resourceGroup('${prefix}-${environment}-logging-rg')
   params: {
@@ -63,7 +92,42 @@ module logAnalytics 'modules/log-analytics.bicep' = {
 }
 
 // ---------------------------
+// RBAC ASSIGNMENTS
+// ---------------------------
+module rbacAssignments '../../bicep/modules/bootstrap/rbac-assignments.bicep' = {
+  name: 'rbac-deployment'
+  scope: managementGroup(managementGroups.outputs.platformId)
+  params: {
+    prefix: prefix
+    roles: rolesArray
+    principalIds: principalIds
+  }
+  dependsOn: [
+    managementGroups
+  ]
+}
+
+// ---------------------------
+// SECURITY BASELINES
+// ---------------------------
+module securityBaselines '../../bicep/modules/bootstrap/security-baselines.bicep' = {
+  name: 'security-baselines-deployment'
+  scope: managementGroup(managementGroups.outputs.platformId)
+  params: {
+    prefix: prefix
+    tags: tags
+  }
+  dependsOn: [
+    managementGroups
+  ]
+}
+
+// ---------------------------
 // OUTPUTS
 // ---------------------------
 output platformMGId string = managementGroups.outputs.platformId
+output policyIds array = policyDefinitions.outputs.policyIds
+output assignmentIds array = policyAssignments.outputs.assignmentIds
 output logWorkspaceId string = logAnalytics.outputs.workspaceId
+output rbacAssignmentIds array = rbacAssignments.outputs.roleAssignmentIds
+output securityBaselineId string = securityBaselines.outputs.securityBaselineId
