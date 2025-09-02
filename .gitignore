@@ -1,0 +1,30 @@
+# Azure credentials
+.azure/
+
+# VS Code settings
+.vscode/
+*.code-workspace
+
+# PowerShell
+*.ps1.log
+
+# Local configuration files
+local.settings.json
+
+# Build output
+bin/
+obj/
+
+# Node.js dependencies
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+env/
+venv/
+
+# Operating System Files
+.DS_Store
+Thumbs.db

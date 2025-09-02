@@ -1,64 +1,158 @@
-# PowerShell script to bootstrap Azure Landing Zone automation
-
+# Bootstrap script for Azure Landing Zone
 [CmdletBinding()]
 param (
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, HelpMessage = "Azure AD Tenant ID")]
     [string]$TenantId,
-    
-    [Parameter(Mandatory = $true)]
+
+    [Parameter(Mandatory = $true, HelpMessage = "Azure Subscription ID")]
     [string]$SubscriptionId,
-    
-    [Parameter(Mandatory = $true)]
+
+    [Parameter(Mandatory = $true, HelpMessage = "Azure Region for resource deployment")]
+    [ValidateSet('eastus', 'eastus2', 'westus', 'westus2', 'centralus')]
     [string]$Location,
-    
-    [Parameter(Mandatory = $false)]
+
+    [Parameter(Mandatory = $false, HelpMessage = "Path to YAML configuration file")]
+    [ValidateScript({ Test-Path $_ -PathType Leaf })]
+    [string]$ConfigPath = ".\config\bootstrap-config.yml",
+
+    [Parameter(Mandatory = $false, HelpMessage = "Prefix for management group hierarchy")]
+    [ValidatePattern('^[a-zA-Z0-9-]{1,10}$')]
     [string]$ManagementGroupPrefix = "alz"
 )
 
-# Import required modules
-Import-Module Az.Accounts
-Import-Module Az.Resources
+# Initialize script-level variable for config
+$script:ALZConfig = $null
+$script:ConfigPath = $null
 
-# Connect to Azure
-try {
-    Connect-AzAccount -Tenant $TenantId -Subscription $SubscriptionId
-}
-catch {
-    Write-Error "Failed to connect to Azure: $_"
-    exit 1
-}
+#Requires -Version 7.0
+#Requires -Modules Az.Accounts, Az.Resources, Az.ManagementGroups
 
-# Create Management Group Structure
-function Create-ManagementGroupStructure {
-    param (
-        [string]$Prefix
-    )
-    
+function Test-Prerequisite {
+    [CmdletBinding()]
+    param()
+    Write-Verbose "Checking prerequisites..."
     try {
-        # Create root management group
-        New-AzManagementGroup -GroupName "$Prefix-root" -DisplayName "ALZ Root"
-        
-        # Create platform management group
-        New-AzManagementGroup -GroupName "$Prefix-platform" -DisplayName "Platform" -ParentId "/providers/Microsoft.Management/managementGroups/$Prefix-root"
-        
-        Write-Output "Management group structure created successfully"
+        $config = Get-Content -Path $script:ConfigPath -Raw | ConvertFrom-Yaml
+        Write-Verbose "Configuration file parsed successfully"
+        $script:ALZConfig = $config
+        $requiredSections = @('azure', 'managementGroups', 'logging', 'networking')
+        $missingSections = $requiredSections.Where({ -not $config.ContainsKey($_) })
+        if ($missingSections) {
+            throw "Missing required configuration sections: $($missingSections -join ', ')"
+        }
+        Write-Information "Configuration validation completed" -InformationAction Continue
     }
     catch {
-        Write-Error "Failed to create management group structure: $_"
-        exit 1
+        throw "Configuration validation failed: $_"
+    }
+}
+
+function Connect-ToAzure {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$TenantId,
+        [Parameter(Mandatory = $true)]
+        [string]$SubscriptionId
+    )
+    Write-Verbose "Initiating Azure connection..."
+    try {
+        $null = Connect-AzAccount -Tenant $TenantId -Subscription $SubscriptionId -ErrorAction Stop
+        $context = Set-AzContext -Subscription $SubscriptionId -ErrorAction Stop
+        Write-Verbose "Connected to subscription: $($context.Subscription.Name)"
+        Write-Information "Azure connection established" -InformationAction Continue
+    }
+    catch {
+        throw "Azure connection failed: $_"
+    }
+}
+
+function New-ManagementGroupStructure {
+    [CmdletBinding(SupportsShouldProcess)]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Prefix,
+        [Parameter(Mandatory = $true)]
+        [string]$Location
+    )
+    Write-Verbose "Creating management group hierarchy..."
+    try {
+        # Create root management group
+        $rootParams = @{
+            GroupName = "$Prefix-root"
+            DisplayName = "ALZ Root"
+            Location = $Location
+            ErrorAction = "Stop"
+        }
+        if ($PSCmdlet.ShouldProcess("$Prefix-root", "Create root management group")) {
+            $rootGroup = New-AzManagementGroup @rootParams
+            Write-Verbose "Created root management group: $($rootGroup.Name)"
+        }
+
+        # Create platform hierarchy
+        $groups = @(
+            @{ Name = 'platform'; Display = 'Platform'; Parent = $rootGroup.Name }
+            @{ Name = 'identity'; Display = 'Identity'; Parent = "$Prefix-platform" }
+            @{ Name = 'management'; Display = 'Management'; Parent = "$Prefix-platform" }
+            @{ Name = 'connectivity'; Display = 'Connectivity'; Parent = "$Prefix-platform" }
+            @{ Name = 'landingzones'; Display = 'Landing Zones'; Parent = $rootGroup.Name }
+            @{ Name = 'corp'; Display = 'Corporate'; Parent = "$Prefix-landingzones" }
+            @{ Name = 'online'; Display = 'Online'; Parent = "$Prefix-landingzones" }
+            @{ Name = 'sandbox'; Display = 'Sandbox'; Parent = $rootGroup.Name }
+            @{ Name = 'decommissioned'; Display = 'Decommissioned'; Parent = $rootGroup.Name }
+        )
+
+        foreach ($group in $groups) {
+            $mgParams = @{
+                GroupName = "$Prefix-$($group.Name)"
+                DisplayName = $group.Display
+                ParentId = "/providers/Microsoft.Management/managementGroups/$($group.Parent)"
+                Location = $Location
+                ErrorAction = "Stop"
+            }
+            if ($PSCmdlet.ShouldProcess("$Prefix-$($group.Name)", "Create management group")) {
+                $mg = New-AzManagementGroup @mgParams
+                Write-Verbose "Created management group: $($mg.Name)"
+            }
+        }
+        Write-Information "Management group hierarchy created" -InformationAction Continue
+    }
+    catch {
+        throw "Failed to create management group structure: $_"
     }
 }
 
 # Main execution
 try {
-    Write-Output "Starting Azure Landing Zone bootstrap process..."
-    
-    # Create management group structure
-    Create-ManagementGroupStructure -Prefix $ManagementGroupPrefix
-    
-    Write-Output "Bootstrap process completed successfully"
+    Set-StrictMode -Version Latest
+    $ErrorActionPreference = 'Stop'
+    $VerbosePreference = 'Continue'
+
+    # Start transcript
+    $transcriptPath = Join-Path $PSScriptRoot "logs"
+    if (-not (Test-Path $transcriptPath)) {
+        $null = New-Item -ItemType Directory -Path $transcriptPath
+    }
+    $logFile = Join-Path $transcriptPath "bootstrap_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+    Start-Transcript -Path $logFile
+
+    Write-Information "Starting Azure Landing Zone bootstrap process..." -InformationAction Continue
+
+    # Store ConfigPath in script scope for use in Test-Prerequisite
+    $script:ConfigPath = $ConfigPath
+
+    # Run deployment steps
+    Test-Prerequisite
+    Connect-ToAzure -TenantId $TenantId -SubscriptionId $SubscriptionId
+    New-ManagementGroupStructure -Prefix $ManagementGroupPrefix -Location $Location
+
+    Write-Information "Bootstrap process completed successfully!" -InformationAction Continue
 }
 catch {
     Write-Error "Bootstrap process failed: $_"
+    Write-Error $_.ScriptStackTrace
     exit 1
+}
+finally {
+    Stop-Transcript
 }

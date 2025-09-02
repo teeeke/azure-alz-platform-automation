@@ -1,0 +1,150 @@
+name: Test Azure Landing Zone Configuration
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'src/bicep/**'
+      - 'config/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  PREFIX: "alz-test"
+  ENVIRONMENT: "development"
+
+jobs:
+  validate-bicep:
+    name: Validate Bicep Templates
+    runs-on: ubuntu-latest
+    environment: development
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Bicep CLI
+        run: |
+          curl -Lo bicep https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64
+          chmod +x ./bicep
+          sudo mv ./bicep /usr/local/bin/bicep
+          bicep --version
+
+      - name: Lint Bicep Files
+        run: |
+          for file in $(find ./src/bicep -name "*.bicep"); do
+            echo "Linting $file..."
+            bicep build --stdout $file > /dev/null
+          done
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Validate Management Groups Template
+        uses: azure/arm-deploy@v1
+        with:
+          deploymentName: validate-mg-${{ github.run_number }}
+          template: ./src/bicep/modules/management-groups.bicep
+          parameters: >
+            prefix=${{ env.PREFIX }}
+            managementGroupNames={
+              "platform": "${{ env.PREFIX }}-platform",
+              "identity": "${{ env.PREFIX }}-identity",
+              "management": "${{ env.PREFIX }}-mgmt",
+              "connectivity": "${{ env.PREFIX }}-connectivity",
+              "landingZones": "${{ env.PREFIX }}-landingzones",
+              "corp": "${{ env.PREFIX }}-corp",
+              "online": "${{ env.PREFIX }}-online",
+              "sandbox": "${{ env.PREFIX }}-sandbox",
+              "decommissioned": "${{ env.PREFIX }}-decom"
+            }
+          scope: tenant
+          deploymentMode: Validate
+
+      - name: Validate Networking Template
+        uses: azure/arm-deploy@v1
+        with:
+          deploymentName: validate-net-${{ github.run_number }}
+          template: ./src/bicep/modules/networking.bicep
+          parameters: >
+            prefix=${{ env.PREFIX }}
+            environment=${{ env.ENVIRONMENT }}
+            location=${{ secrets.AZURE_LOCATION }}
+            vnetAddressPrefix=10.0.0.0
+            vnetAddressMask=16
+          scope: subscription
+          deploymentMode: Validate
+
+      - name: Validate Logging Template
+        uses: azure/arm-deploy@v1
+        with:
+          deploymentName: validate-log-${{ github.run_number }}
+          template: ./src/bicep/modules/logging.bicep
+          parameters: >
+            prefix=${{ env.PREFIX }}
+            environment=${{ env.ENVIRONMENT }}
+            location=${{ secrets.AZURE_LOCATION }}
+            retentionDays=30
+            enabledSolutions={
+              "securityInsights": true,
+              "updateManagement": true,
+              "changeTracking": true
+            }
+          scope: subscription
+          deploymentMode: Validate
+
+  validate-config:
+    name: Validate Configuration Files
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install yamllint
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yamllint
+
+      - name: Lint YAML Files
+        run: |
+          yamllint -c .yamllint.yml .
+        continue-on-error: true
+
+      - name: Validate Configuration Structure
+        run: |
+          for config in $(find ./config -name "*.yml"); do
+            echo "Validating $config..."
+            yq eval '.' $config > /dev/null
+          done
+
+  validate-scripts:
+    name: Validate PowerShell Scripts
+    runs-on: windows-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $results = Invoke-ScriptAnalyzer -Path ./src/scripts -Recurse
+          $results | Format-Table -AutoSize
+          if ($results) {
+            Write-Output "PSScriptAnalyzer found some issues"
+            exit 1
+          }

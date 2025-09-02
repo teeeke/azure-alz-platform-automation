@@ -1,0 +1,78 @@
+# Azure Landing Zone Bootstrap Configuration
+variables:
+  # Default values that can be overridden during deployment
+  defaults:
+    location: "eastus"
+    environment: "prod"
+    prefix: "alz"
+    tags:
+      Environment: "${environment}"
+      Project: "Azure Landing Zone"
+      Owner: "Platform Team"
+      CreatedBy: "Automation"
+
+bootstrapConfig:
+  # Azure Configuration
+  azure:
+    tenantId: "${TENANT_ID}" # Set via environment variable or parameter
+    subscriptionId: "${SUBSCRIPTION_ID}" # Set via environment variable or parameter
+    location: "${location}" # Uses default or override
+    managementGroupPrefix: "${prefix}" # Uses default or override
+    
+  # Management Group Structure - Customizable naming with variables
+  managementGroups:
+    topLevel:
+      - name: "${prefix}-platform"
+        displayName: "Platform"
+        children:
+          - name: "${prefix}-identity"
+            displayName: "Identity"
+          - name: "${prefix}-mgmt"
+            displayName: "Management"
+          - name: "${prefix}-connectivity"
+            displayName: "Connectivity"
+      - name: "${prefix}-landingzones"
+        displayName: "Landing Zones"
+        children:
+          - name: "${prefix}-corp"
+            displayName: "Corp"
+          - name: "${prefix}-online"
+            displayName: "Online"
+      - name: "${prefix}-sandbox"
+        displayName: "Sandbox"
+      - name: "${prefix}-decom"
+        displayName: "Decommissioned"
+
+  # Logging and Monitoring - Dynamic naming and configurable settings
+  logging:
+    workspaceName: "${prefix}-${environment}-logs"
+    retentionInDays: "${LOG_RETENTION:30}" # Default 30 days, can be overridden
+    solutions:
+      - name: "SecurityInsights"
+        enabled: true
+      - name: "Updates"
+        enabled: "${ENABLE_UPDATE_MANAGEMENT:true}"
+      - name: "ChangeTracking"
+        enabled: "${ENABLE_CHANGE_TRACKING:true}"
+
+  # Network Configuration - Customizable addressing scheme
+  networking:
+    hub:
+      name: "${prefix}-${environment}-hub"
+      addressSpace:
+        base: "${VNET_BASE_PREFIX:10.0.0.0}"
+        mask: "${VNET_MASK:16}"
+      subnets:
+        - name: "AzureFirewallSubnet" # Required name for Azure Firewall
+          mask: 24
+          offset: 0  # Will be calculated as base + offset
+        - name: "GatewaySubnet"      # Required name for VPN/ER Gateway
+          mask: 24
+          offset: 1
+        - name: "AzureBastionSubnet" # Required name for Bastion
+          mask: 24
+          offset: 2
+        - name: "management"
+          mask: 24
+          offset: 3
+      dnsServers: "${DNS_SERVERS:[]}" # Optional custom DNS servers
