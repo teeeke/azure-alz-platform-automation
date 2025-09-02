@@ -6,13 +6,13 @@ param prefix string
 @description('Tags to apply')
 param tags object
 
-// Example: deploy built-in ASC regulatory compliance initiative
+// Example: deploy custom security baseline initiative
 resource securityBaseline 'Microsoft.Authorization/policySetDefinitions@2021-06-01' = {
   name: '${prefix}-asc-security-baseline'
   properties: {
     displayName: 'Azure Security Baseline'
-    description: 'Built-in security baseline for CAF'
-    policyType: 'BuiltIn'
+    description: 'Custom security baseline for CAF'
+    policyType: 'Custom'
     metadata: {
       category: 'Security'
       source: 'CAF Bootstrap'
@@ -20,11 +20,11 @@ resource securityBaseline 'Microsoft.Authorization/policySetDefinitions@2021-06-
     }
     policyDefinitions: [
       {
-        policyDefinitionId: '/providers/Microsoft.Authorization/policyDefinitions/2e214eb5-2f92-4f2f-bdd9-c52d5dcf805f' // Example ASC built-in
+        policyDefinitionId: '/providers/Microsoft.Authorization/policyDefinitions/2e214eb5-2f92-4f2f-bdd9-c52d5dcf805f'
+        parameters: {}
       }
     ]
   }
-  tags: tags
 }
 
 output securityBaselineId string = securityBaseline.id

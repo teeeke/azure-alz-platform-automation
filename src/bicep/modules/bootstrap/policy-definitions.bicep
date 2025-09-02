@@ -17,11 +17,19 @@ var policyDefinitions = [
     policy: {
       if: {
         anyOf: [
-          { field: 'tags.Environment'; exists: false }
-          { field: 'tags.CostCenter'; exists: false }
+          { 
+            field: 'tags.Environment'
+            exists: false 
+          }
+          { 
+            field: 'tags.CostCenter'
+            exists: false 
+          }
         ]
       }
-      then: { effect: 'deny' }
+      then: { 
+        effect: 'deny' 
+      }
     }
   }
   {
@@ -29,8 +37,15 @@ var policyDefinitions = [
     displayName: 'Allowed locations'
     description: 'Restrict deployment locations'
     policy: {
-      if: { not: { field: 'location'; in: [location] } }
-      then: { effect: 'deny' }
+      if: { 
+        not: { 
+          field: 'location'
+          in: [location] 
+        } 
+      }
+      then: { 
+        effect: 'deny' 
+      }
     }
   }
 ]
@@ -42,9 +57,16 @@ resource policies 'Microsoft.Authorization/policyDefinitions@2021-06-01' = [for 
     description: policy.description
     policyType: 'Custom'
     mode: 'All'
-    metadata: { category: 'Custom'; source: 'Azure Landing Zone'; version: '1.0.0' }
+    metadata: { 
+      category: 'Custom'
+      source: 'Azure Landing Zone'
+      version: '1.0.0'
+    }
     policyRule: policy.policy
   }
 }]
 
-output policyIds array = [for (policy, i) in policyDefinitions: { name: policy.name; id: policies[i].id }]
+output policyIds array = [for (policy, i) in policyDefinitions: { 
+  name: policy.name
+  id: policies[i].id 
+}]
