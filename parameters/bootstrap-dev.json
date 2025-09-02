@@ -1,12 +1,28 @@
 {
-  "prefix": "alz",
-  "environment": "dev",
-  "location": "eastus",
-  "tags": {
-    "Environment": "Dev",
-    "Owner": "tehuti.ekema@globaris.gov",
-    "CostCenter": "12345"
-  },
-  "logRetentionDays": 30,
-  "mgCustomNames": {}
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "prefix": {
+      "value": "alz"
+    },
+    "environment": {
+      "value": "dev"
+    },
+    "location": {
+      "value": "eastus"
+    },
+    "tags": {
+      "value": {
+        "Environment": "Dev",
+        "Owner": "tehuti.ekema@globaris.gov",
+        "CostCenter": "12345"
+      }
+    },
+    "logRetentionDays": {
+      "value": 30
+    },
+    "mgCustomNames": {
+      "value": {}
+    }
+  }
 }

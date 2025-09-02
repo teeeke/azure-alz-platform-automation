@@ -14,15 +14,26 @@ on:
         description: 'Azure region for deployment'
         required: true
         default: 'eastus'
+
 jobs:
   bootstrap:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      
       - name: Login to Azure
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Get current subscription
+        id: get_subscription
+        run: |
+          echo "Getting current subscription ID..."
+          subscriptionId=$(az account show --query id -o tsv)
+          echo "Current subscription: $subscriptionId"
+          echo "subscriptionId=$subscriptionId" >> $GITHUB_ENV
+      
       - name: Resolve group names to IDs
         id: resolve_groups
         run: |
@@ -54,17 +65,35 @@ jobs:
           
           # Save to file instead of environment variable
           echo "$principalIds" > /tmp/principal-ids.json
+      
       - name: Prepare bootstrap parameters
         run: |
           echo "Reading principal IDs from file:"
           cat /tmp/principal-ids.json
           
-          # Use the JSON file directly with jq
+          # Use the JSON file directly with jq and add missing parameters
           principalIds=$(cat /tmp/principal-ids.json)
-          jq --argjson ids "$principalIds" '.principalIds = $ids' parameters/bootstrap-${{ github.event.inputs.environment }}.json > parameters/bootstrap-temp.json
+          
+          # Add required parameters
+          jq --argjson ids "$principalIds" \
+             --arg subId "${{ env.subscriptionId }}" \
+             '.principalIds = $ids | 
+              .subscriptionId.value = $subId |
+              .rolesArray.value = [
+                {
+                  "name": "Owner",
+                  "id": ("/subscriptions/" + $subId + "/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635")
+                },
+                {
+                  "name": "Contributor", 
+                  "id": ("/subscriptions/" + $subId + "/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c")
+                }
+              ]' \
+             parameters/bootstrap-${{ github.event.inputs.environment }}.json > parameters/bootstrap-temp.json
           
           echo "Generated bootstrap-temp.json:"
           cat parameters/bootstrap-temp.json
+      
       - name: Deploy Bootstrap
         run: |
           az deployment tenant create \
