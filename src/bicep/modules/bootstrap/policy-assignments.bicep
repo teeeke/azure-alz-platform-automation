@@ -13,7 +13,6 @@ param managementGroupId string
 resource policyAssignments 'Microsoft.Authorization/policyAssignments@2021-06-01' = [
   for policy in policyDefinitions: {
     name: '${prefix}-${policy.name}-assignment'
-    scope: managementGroup(managementGroupId) // correct scope
     properties: {
       displayName: '${policy.displayName} Assignment'
       policyDefinitionId: policy.id
