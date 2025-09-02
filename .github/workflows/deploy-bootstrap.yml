@@ -71,25 +71,58 @@ jobs:
           echo "Reading principal IDs from file:"
           cat /tmp/principal-ids.json
           
-          # Use the JSON file directly with jq and add missing parameters
+          # Read the original parameter file and create a new one with all required parameters
           principalIds=$(cat /tmp/principal-ids.json)
           
-          # Add required parameters
-          jq --argjson ids "$principalIds" \
-             --arg subId "${{ env.subscriptionId }}" \
-             '.principalIds = $ids | 
-              .subscriptionId.value = $subId |
-              .rolesArray.value = [
-                {
-                  "name": "Owner",
-                  "id": ("/subscriptions/" + $subId + "/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635")
-                },
-                {
-                  "name": "Contributor", 
-                  "id": ("/subscriptions/" + $subId + "/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c")
+          # Create the complete parameter file from scratch
+          cat > parameters/bootstrap-temp.json << EOF
+          {
+            "\$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+            "contentVersion": "1.0.0.0",
+            "parameters": {
+              "prefix": {
+                "value": "alz"
+              },
+              "environment": {
+                "value": "${{ github.event.inputs.environment }}"
+              },
+              "location": {
+                "value": "${{ github.event.inputs.location }}"
+              },
+              "subscriptionId": {
+                "value": "${{ env.subscriptionId }}"
+              },
+              "principalIds": {
+                "value": $principalIds
+              },
+              "rolesArray": {
+                "value": [
+                  {
+                    "name": "Owner",
+                    "id": "/subscriptions/${{ env.subscriptionId }}/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635"
+                  },
+                  {
+                    "name": "Contributor",
+                    "id": "/subscriptions/${{ env.subscriptionId }}/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c"
+                  }
+                ]
+              },
+              "tags": {
+                "value": {
+                  "Environment": "${{ github.event.inputs.environment }}",
+                  "Owner": "tehuti.ekema@globaris.gov",
+                  "CostCenter": "12345"
                 }
-              ]' \
-             parameters/bootstrap-${{ github.event.inputs.environment }}.json > parameters/bootstrap-temp.json
+              },
+              "logRetentionDays": {
+                "value": 30
+              },
+              "mgCustomNames": {
+                "value": {}
+              }
+            }
+          }
+          EOF
           
           echo "Generated bootstrap-temp.json:"
           cat parameters/bootstrap-temp.json
