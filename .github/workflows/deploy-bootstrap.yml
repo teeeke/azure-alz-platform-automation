@@ -31,13 +31,23 @@ jobs:
           IFS=',' read -r -a groupArray <<< "$groups"
           principalIds="[]"
           for group in "${groupArray[@]}"; do
+            # Trim whitespace
+            group=$(echo "$group" | xargs)
+            echo "Resolving group: $group"
             id=$(az ad group show --group "$group" --query id -o tsv)
+            echo "Found ID: $id"
             principalIds=$(jq --arg id "$id" '. += [$id]' <<< "$principalIds")
           done
-          echo "principalIds=$principalIds" >> $GITHUB_ENV
+          echo "Final principalIds: $principalIds"
+          echo "principalIds<<EOF" >> $GITHUB_ENV
+          echo "$principalIds" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
       - name: Prepare bootstrap parameters
         run: |
+          echo "Using principalIds: ${{ env.principalIds }}"
           jq --argjson ids "${{ env.principalIds }}" '.principalIds = $ids' parameters/bootstrap-${{ github.event.inputs.environment }}.json > parameters/bootstrap-temp.json
+          echo "Generated bootstrap-temp.json:"
+          cat parameters/bootstrap-temp.json
       - name: Deploy Bootstrap
         run: |
           az deployment tenant create \
