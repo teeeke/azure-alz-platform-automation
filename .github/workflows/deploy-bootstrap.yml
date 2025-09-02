@@ -1,74 +1,47 @@
-name: Bootstrap Deployment
-
+name: Deploy Bootstrap
 on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Target environment (dev/test/prod)"
+        description: 'Environment to deploy'
         required: true
-        default: "dev"
-      prefix:
-        description: "Resource prefix"
+        default: dev
+      principalGroups:
+        description: 'Comma-separated list of Azure AD groups for RBAC'
         required: true
-        default: "demo"
+        default: 'PlatformAdmins,DevOpsTeam'
       location:
-        description: "Azure region"
+        description: 'Azure region for deployment'
         required: true
-        default: "eastus"
-      logRetentionDays:
-        description: "Log Analytics retention days"
-        required: false
-        default: "30"
-      subscriptionId:
-        description: "Subscription ID for logging RG"
-        required: false
-        default: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      tags:
-        description: "Resource tags (JSON string)"
-        required: false
-        default: '{"Owner":"PlatformTeam"}'
-      principalIds:
-        description: "Principal IDs (JSON array)"
-        required: false
-        default: '[]'
-      rolesArray:
-        description: "Role Definition IDs (JSON array)"
-        required: false
-        default: '[]'
-      enabledSolutions:
-        description: "Monitoring solutions (JSON object)"
-        required: false
-        default: '{"securityInsights": true, "updateManagement": true, "changeTracking": true}'
-
+        default: 'eastus'
 jobs:
-  deploy:
+  bootstrap:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Log in to Azure
-        uses: azure/login@v2
+      - uses: actions/checkout@v3
+      - name: Login to Azure
+        uses: azure/login@v1
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-
-      - name: Deploy Bootstrap Bicep
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Resolve group names to IDs
+        id: resolve_groups
+        run: |
+          echo "Resolving principal group names..."
+          groups="${{ github.event.inputs.principalGroups }}"
+          IFS=',' read -r -a groupArray <<< "$groups"
+          principalIds="[]"
+          for group in "${groupArray[@]}"; do
+            id=$(az ad group show --group "$group" --query id -o tsv)
+            principalIds=$(jq --arg id "$id" '. += [$id]' <<< "$principalIds")
+          done
+          echo "principalIds=$principalIds" >> $GITHUB_ENV
+      - name: Prepare bootstrap parameters
+        run: |
+          jq --argjson ids "${{ env.principalIds }}" '.principalIds = $ids' parameters/bootstrap-${{ github.event.inputs.environment }}.json > parameters/bootstrap-temp.json
+      - name: Deploy Bootstrap
         run: |
           az deployment tenant create \
-            --name "bootstrap-${{ github.run_id }}" \
+            --name "bootstrap-${{ github.event.inputs.environment }}" \
             --location ${{ github.event.inputs.location }} \
             --template-file src/bootstrap/bootstrap.bicep \
-            --parameters \
-              environment=${{ github.event.inputs.environment }} \
-              prefix=${{ github.event.inputs.prefix }} \
-              location=${{ github.event.inputs.location }} \
-              logRetentionDays=${{ github.event.inputs.logRetentionDays }} \
-              subscriptionId=${{ github.event.inputs.subscriptionId }} \
-              tags="${{ github.event.inputs.tags }}" \
-              principalIds="${{ github.event.inputs.principalIds }}" \
-              rolesArray="${{ github.event.inputs.rolesArray }}" \
-              enabledSolutions="${{ github.event.inputs.enabledSolutions }}"
+            --parameters @parameters/bootstrap-temp.json
