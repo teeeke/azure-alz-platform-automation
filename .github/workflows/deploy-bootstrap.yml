@@ -27,10 +27,21 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           enable-AzPSSession: true
       
-      - name: Set Azure CLI defaults
+      - name: Set Azure CLI defaults and verify connection
         run: |
+          # Clear any existing sessions
+          az account clear
+          
+          # Login again to ensure fresh session
+          echo "Re-authenticating to ensure fresh session..."
+          az login --service-principal -u $(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r .clientId) -p $(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r .clientSecret) --tenant $(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r .tenantId)
+          
+          # Set defaults and verify
           az configure --defaults location=${{ github.event.inputs.location }}
           az account show --output table
+          
+          # Test tenant access
+          az account management-group list --query "[0].id" --output tsv || echo "No management groups found - this is expected for initial deployment"
       
       - name: Get current subscription
         id: get_subscription
@@ -112,7 +123,7 @@ jobs:
               "tags": {
                 "value": {
                   "Environment": "${{ github.event.inputs.environment }}",
-                  "Owner": "tehuti.ekema@globaris.org",
+                  "Owner": "tehuti.ekema@globaris.gov",
                   "CostCenter": "12345"
                 }
               },
@@ -134,24 +145,38 @@ jobs:
           echo "=== Validating JSON syntax ==="
           jq empty parameters/bootstrap-temp.json
           
-          echo "=== Validating Bicep template ==="
+          echo "=== Testing Azure connection before validation ==="
+          az account show --query "id" --output tsv
+          
+          echo "=== Validating Bicep template with minimal output ==="
+          # Use a simpler validation approach
           az deployment tenant validate \
             --location ${{ github.event.inputs.location }} \
             --template-file src/bootstrap/bootstrap.bicep \
             --parameters @parameters/bootstrap-temp.json \
-            --output table
+            --query "properties.provisioningState" \
+            --output tsv
+          
+          echo "Template validation completed"
       
       - name: Deploy Bootstrap
         run: |
           echo "=== Starting bootstrap deployment ==="
           deploymentName="bootstrap-${{ github.event.inputs.environment }}-$(date +%Y%m%d-%H%M%S)"
           
+          # Deploy without verbose to avoid session issues
           az deployment tenant create \
             --name "$deploymentName" \
             --location ${{ github.event.inputs.location }} \
             --template-file src/bootstrap/bootstrap.bicep \
             --parameters @parameters/bootstrap-temp.json \
-            --output table \
-            --verbose
+            --query "properties.provisioningState" \
+            --output tsv
           
           echo "=== Deployment completed: $deploymentName ==="
+          
+          # Get deployment status
+          az deployment tenant show \
+            --name "$deploymentName" \
+            --query "{name: name, state: properties.provisioningState, timestamp: properties.timestamp}" \
+            --output table
